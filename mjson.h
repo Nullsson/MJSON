@@ -36,102 +36,123 @@ struct mjson_parser
     int32_t TokenParent;
 };
 
-static mjson_token *mjson_alloc_token(mjson_parser *parser, mjson_token *tokens,
-                                   const size_t num_tokens) {
-  mjson_token *tok;
-  if (parser->TokenNext >= num_tokens) {
-    return NULL;
-  }
-  tok = &tokens[parser->TokenParent++];
-  tok->Start = tok->End = -1;
-  tok->Size = 0;
+static mjson_token *
+mjson_init_token(mjson_parser *Parser, mjson_token *Tokens, uint32_t TokenLength)
+{
+    mjson_token *Token;
+    
+    if (Parser->TokenNext >= TokenLength) {
+        return NULL;
+    }
 
-  return tok;
+    Token = &Tokens[Parser->TokenNext++];
+    Token->Start = Token->End = -1;
+    Token->Size = 0;
+
+    return Token;
 }
 
-static void mjson_fill_token(mjson_token *token, const mjson_type type,
-                            const int start, const int end) {
-  token->Type = type;
-  token->Start = start;
-  token->End = end;
-  token->Size = 0;
+static void
+mjson_set_token_data(mjson_token *Token, mjson_type Type, int Start, int End)
+{
+    Token->Type = Type;
+    Token->Start = Start;
+    Token->End = End;
+    Token->Size = 0;
 }
 
-static int mjson_parse_primitive(mjson_parser *parser, const char *js,
-                             const size_t len, mjson_token *tokens,
-                             const size_t num_tokens)
+static int mjson_parse_primitive(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *Tokens, uint32_t TokenLength)
 {
     return -1;
 }
 
-static int mjson_parse_string(mjson_parser *parser, const char *js,
-                             const size_t len, mjson_token *tokens,
-                             const size_t num_tokens) {
-  mjson_token *token;
+static int
+mjson_parse_string(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *Tokens, uint32_t TokenLength)
+{
+    mjson_token *Token;
 
-  int start = parser->Position;
+    int Start = Parser->Position;
+    Parser->Position++;
 
-  parser->Position++;
+    for (; Parser->Position < JsonLength && Json[Parser->Position] != '\0'; Parser->Position++)
+    {
+        char C = Json[Parser->Position];
 
-  /* Skip starting quote */
-  for (; parser->Position < len && js[parser->Position] != '\0'; parser->Position++) {
-    char c = js[parser->Position];
+        // NOTE(Oskar): If quote then we found end of string.
+        if (C == '\"')
+        {
+            if (Tokens == NULL)
+            {
+                return 0;
+            }
+            
+            Token = mjson_init_token(Parser, Tokens, TokenLength);
+            
+            if (Token == NULL)
+            {
+                Parser->Position = Start;
+                // TODO(Oskar): Error no mem
+                return -1;
+            }
+            
+            mjson_set_token_data(Token, MJSON_STRING, Start + 1, Parser->Position);
 
-    /* Quote: end of string */
-    if (c == '\"') {
-      if (tokens == NULL) {
-        return 0;
-      }
-      token = mjson_alloc_token(parser, tokens, num_tokens);
-      if (token == NULL) {
-        parser->Position = start;
-        return -1;
-      }
-      mjson_fill_token(token, MJSON_STRING, start + 1, parser->Position);
-
-      return 0;
-    }
-
-    /* Backslash: Quoted symbol expected */
-    if (c == '\\' && parser->Position + 1 < len) {
-      int i;
-      parser->Position++;
-      switch (js[parser->Position]) {
-      /* Allowed escaped symbols */
-      case '\"':
-      case '/':
-      case '\\':
-      case 'b':
-      case 'f':
-      case 'r':
-      case 'n':
-      case 't':
-        break;
-      /* Allows escaped symbol \uXXXX */
-      case 'u':
-        parser->Position++;
-        for (i = 0; i < 4 && parser->Position < len && js[parser->Position] != '\0';
-             i++) {
-          /* If it isn't a hex character we have an error */
-          if (!((js[parser->Position] >= 48 && js[parser->Position] <= 57) ||   /* 0-9 */
-                (js[parser->Position] >= 65 && js[parser->Position] <= 70) ||   /* A-F */
-                (js[parser->Position] >= 97 && js[parser->Position] <= 102))) { /* a-f */
-            parser->Position = start;
-            return -1;
-          }
-          parser->Position++;
+            return 0;
         }
-        parser->Position--;
-        break;
-      /* Unexpected symbol */
-      default:
-        parser->Position = start;
-        return -1;
-      }
+
+        // NOTE(Oskar): Parsing escaped characters and sequences.
+        if (C == '\\' && Parser->Position + 1 < JsonLength) 
+        {
+            int Index;
+            Parser->Position++;
+            switch (Json[Parser->Position]) 
+            {
+                case '\"':
+                case '/':
+                case '\\':
+                case 'b':
+                case 'f':
+                case 'r':
+                case 'n':
+                case 't':
+                {
+
+                } break;
+                
+                case 'u':
+                {
+                    // NOTE(Oskar): Parse hex character.
+                    Parser->Position++;
+                    for (Index = 0; Index < 4 && Parser->Position < JsonLength && Json[Parser->Position] != '\0'; Index++) {
+                        if (!((Json[Parser->Position] >= 48 && Json[Parser->Position] <= 57) ||   /* 0-9 */
+                            (Json[Parser->Position] >= 65 && Json[Parser->Position] <= 70) ||     /* A-F */
+                            (Json[Parser->Position] >= 97 && Json[Parser->Position] <= 102)))     /* a-f */
+                        {
+                            Parser->Position = Start;
+
+                            // TODO(Oskar): INVALID JSON
+                            return -1;
+                        }
+                        Parser->Position++;
+                    }
+                    Parser->Position--;
+                } break;
+                
+                default:
+                {
+                    Parser->Position = Start;
+
+                    // TODO(Oskar): INVALID JSON
+                    return -1;
+                }
+            }
+        }
     }
-  }
-  parser->Position = start;
-  return -1;
+
+    Parser->Position = Start;
+
+    // TODO(Oskar): INCOMPLETE JSON STRING
+    return -1;
 }
 
 MJSON_API int
@@ -158,7 +179,7 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
                     break;
                 }
 
-                CurrentToken = mjson_alloc_token(Parser, Tokens, TokenLength);
+                CurrentToken = mjson_init_token(Parser, Tokens, TokenLength);
                 if (CurrentToken == NULL)
                 {
                     // TODO(Oskar): ERROR NO MEMORY
