@@ -15,9 +15,13 @@ enum mjson_type
     MJSON_OBJECT,
     MJSON_ARRAY,
     MJSON_STRING,
-    MJSON_NUMBER,
-    MJSON_BOOLEAN,
-    MJSON_NULL
+    MJSON_PRIMITIVE
+};
+
+struct mjson_string
+{
+    char *Data;
+    uint32_t Length;
 };
 
 // TODO(Oskar): Store Start / End positions in JSON instead of actual value?
@@ -36,7 +40,7 @@ struct mjson_parser
     int32_t TokenParent;
 };
 
-static mjson_token *
+MJSON_API mjson_token *
 mjson_init_token(mjson_parser *Parser, mjson_token *Tokens, uint32_t TokenLength)
 {
     mjson_token *Token;
@@ -52,7 +56,7 @@ mjson_init_token(mjson_parser *Parser, mjson_token *Tokens, uint32_t TokenLength
     return Token;
 }
 
-static void
+MJSON_API void
 mjson_set_token_data(mjson_token *Token, mjson_type Type, int Start, int End)
 {
     Token->Type = Type;
@@ -61,20 +65,74 @@ mjson_set_token_data(mjson_token *Token, mjson_type Type, int Start, int End)
     Token->Size = 0;
 }
 
-static int mjson_parse_primitive(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *Tokens, uint32_t TokenLength)
+MJSON_API int 
+mjson_parse_primitive(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *Tokens, uint32_t TokenLength)
 {
+    mjson_token *Token;
+    int Start = Parser->Position;
+
+    for (; Parser->Position < JsonLength && Json[Parser->Position] != '\0'; ++Parser->Position)
+    {
+        switch(Json[Parser->Position])
+        {
+            case ':':
+            case '\t':
+            case '\r':
+            case '\n':
+            case ' ':
+            case ',':
+            case ']':
+            case '}':
+            {
+                goto found;
+            } break;
+            default: 
+            {
+            } break;
+        }
+
+        if (Json[Parser->Position] < 32 || Json[Parser->Position] >= 127)
+        {
+            Parser->Position = Start;
+            // TODO(Oskar): Invalid json
+            return -1;
+        }
+    }
+
+    // NOTE(Oskar): Json primitive type has to be followed by a comma, object or array.
+    Parser->Position = Start;
+    // TODO(Oskar): Invalid json
     return -1;
+
+found:
+    if (Tokens == NULL)
+    {
+        Parser->Position--;
+        return 0;
+    }
+
+    Token = mjson_init_token(Parser, Tokens, TokenLength);
+    if (Token == NULL)
+    {
+        Parser->Position = Start;
+        // TODO(Oskar): NO MEM ERR
+        return -1;
+    }
+
+    mjson_set_token_data(Token, MJSON_PRIMITIVE, Start, Parser->Position);
+
+    Parser->Position--;
+    return 0;
 }
 
-static int
+MJSON_API int
 mjson_parse_string(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *Tokens, uint32_t TokenLength)
 {
     mjson_token *Token;
-
     int Start = Parser->Position;
     Parser->Position++;
 
-    for (; Parser->Position < JsonLength && Json[Parser->Position] != '\0'; Parser->Position++)
+    for (; Parser->Position < JsonLength && Json[Parser->Position] != '\0'; ++Parser->Position)
     {
         char C = Json[Parser->Position];
 
@@ -279,7 +337,22 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
 
             case ',':
             {
-                // TODO(Oskar): ..
+                if (Tokens != NULL && Parser->TokenParent != -1 &&
+                    Tokens[Parser->TokenParent].Type != MJSON_ARRAY &&
+                    Tokens[Parser->TokenParent].Type != MJSON_OBJECT)
+                {
+                    for (Index = Parser->TokenNext - 1; Index >= 0; --Index)
+                    {
+                        if (Tokens[Index].Type == MJSON_ARRAY || Tokens[Index].Type == MJSON_OBJECT)
+                        {
+                            if (Tokens[Index].Start != -1 && Tokens[Index].End == -1)
+                            {
+                                Parser->TokenParent = Index;
+                                break;
+                            }
+                        }
+                    }
+                }
             } break;
 
             case '-':
@@ -321,6 +394,7 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
 
             default:
             {
+
                 // TODO(Oskar): INVALID JSON
                 return -1;
             }
@@ -341,6 +415,14 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
     }
 
     return Count;
+}
+
+MJSON_API mjson_string
+mjson_get_json()
+{
+    mjson_string Result = {};
+
+    return (Result);
 }
 
 MJSON_API void
