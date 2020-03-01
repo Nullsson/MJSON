@@ -18,13 +18,19 @@ enum mjson_type
     MJSON_PRIMITIVE
 };
 
+enum mjson_error
+{
+    MJSON_ERROR_NO_MEMORY = -1,
+    MJSON_ERROR_INVALID_JSON = -2,
+    MJSON_ERROR_INCOMPLETE_JSON = -3
+};
+
 struct mjson_string
 {
     char *Data;
     uint32_t Length;
 };
 
-// TODO(Oskar): Store Start / End positions in JSON instead of actual value?
 struct mjson_token
 {
     mjson_type Type;
@@ -94,15 +100,13 @@ mjson_parse_primitive(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjs
         if (Json[Parser->Position] < 32 || Json[Parser->Position] >= 127)
         {
             Parser->Position = Start;
-            // TODO(Oskar): Invalid json
-            return -1;
+            return MJSON_ERROR_INVALID_JSON;
         }
     }
 
     // NOTE(Oskar): Json primitive type has to be followed by a comma, object or array.
     Parser->Position = Start;
-    // TODO(Oskar): Invalid json
-    return -1;
+    return MJSON_ERROR_INVALID_JSON;
 
 found:
     if (Tokens == NULL)
@@ -115,8 +119,7 @@ found:
     if (Token == NULL)
     {
         Parser->Position = Start;
-        // TODO(Oskar): NO MEM ERR
-        return -1;
+        return MJSON_ERROR_NO_MEMORY;
     }
 
     mjson_set_token_data(Token, MJSON_PRIMITIVE, Start, Parser->Position);
@@ -149,8 +152,7 @@ mjson_parse_string(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_
             if (Token == NULL)
             {
                 Parser->Position = Start;
-                // TODO(Oskar): Error no mem
-                return -1;
+                return MJSON_ERROR_NO_MEMORY;
             }
             
             mjson_set_token_data(Token, MJSON_STRING, Start + 1, Parser->Position);
@@ -187,9 +189,7 @@ mjson_parse_string(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_
                             (Json[Parser->Position] >= 97 && Json[Parser->Position] <= 102)))     /* a-f */
                         {
                             Parser->Position = Start;
-
-                            // TODO(Oskar): INVALID JSON
-                            return -1;
+                            return MJSON_ERROR_INVALID_JSON;
                         }
                         Parser->Position++;
                     }
@@ -199,18 +199,14 @@ mjson_parse_string(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_
                 default:
                 {
                     Parser->Position = Start;
-
-                    // TODO(Oskar): INVALID JSON
-                    return -1;
+                    return MJSON_ERROR_INVALID_JSON;
                 }
             }
         }
     }
 
     Parser->Position = Start;
-
-    // TODO(Oskar): INCOMPLETE JSON STRING
-    return -1;
+    return MJSON_ERROR_INCOMPLETE_JSON;
 }
 
 MJSON_API int
@@ -240,20 +236,16 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
                 CurrentToken = mjson_init_token(Parser, Tokens, TokenLength);
                 if (CurrentToken == NULL)
                 {
-                    // TODO(Oskar): ERROR NO MEMORY
-                    return -1;
+                    return MJSON_ERROR_NO_MEMORY;
                 }
 
                 if (Parser->TokenParent != -1)
                 {
                     mjson_token *T = &Tokens[Parser->TokenParent];
 
-                    // TODO(Oskar): Strict mode?
-
                     if (T->Type == MJSON_OBJECT)
                     {
-                        // TODO(Oskar): INVALID JSON
-                        return -1;
+                        return MJSON_ERROR_INVALID_JSON;
                     }
 
                     T->Size++;
@@ -281,8 +273,7 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
                     {
                         if (CurrentToken->Type != Type)
                         {
-                            // TODO(Oskar): INVALID JSON
-                            return -1;
+                            return MJSON_ERROR_INVALID_JSON;
                         }
 
                         Parser->TokenParent = -1;
@@ -294,8 +285,7 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
                 // NOTE(Oskar): Unmatched closing bracket is an error
                 if (Index == -1)
                 {
-                    // TODO(Oskar): INVALID JSON
-                    return -1;
+                    return MJSON_ERROR_INVALID_JSON;
                 }
 
                 for (; Index >= 0; --Index)
@@ -375,8 +365,7 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
                     mjson_token *T = &Tokens[Parser->TokenParent];
                     if (T->Type == MJSON_OBJECT || (T->Type == MJSON_STRING && T->Size != 0))
                     {
-                        // TODO(Oskar): INVALID JSON
-                        return -1;
+                        return MJSON_ERROR_INVALID_JSON;
                     }
                 }
 
@@ -394,9 +383,7 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
 
             default:
             {
-
-                // TODO(Oskar): INVALID JSON
-                return -1;
+                return MJSON_ERROR_INVALID_JSON;
             }
         }
     }
@@ -408,8 +395,7 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
             // NOTE(Oskar): Check for unmatched opening bracket.
             if (Tokens[Index].Start != -1 && Tokens[Index].End == -1)
             {
-                // TODO(Oskar): Error type?
-                return -1;
+                return MJSON_ERROR_INCOMPLETE_JSON;
             }
         }
     }
