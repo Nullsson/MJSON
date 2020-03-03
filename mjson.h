@@ -2,6 +2,7 @@
 #define MJSON_H
 
 #include <stdint.h>
+#include <string.h> // TODO(Oskar): Work this dependency away.
 
 #ifndef MJSON_NO_STATIC
 #define MJSON_API static
@@ -23,12 +24,6 @@ enum mjson_error
     MJSON_ERROR_NO_MEMORY = -1,
     MJSON_ERROR_INVALID_JSON = -2,
     MJSON_ERROR_INCOMPLETE_JSON = -3
-};
-
-struct mjson_string
-{
-    char *Data;
-    uint32_t Length;
 };
 
 struct mjson_token
@@ -403,12 +398,19 @@ mjson_parse(mjson_parser *Parser, char *Json, uint32_t JsonLength, mjson_token *
     return Count;
 }
 
-MJSON_API mjson_string
-mjson_get_json()
+MJSON_API int32_t
+mjson_get_value(char *Key, char *Json, mjson_token *Tokens, uint32_t TokenLength)
 {
-    mjson_string Result = {};
+    for (uint32_t Index = 0; Index < TokenLength; ++Index)
+    {
+        char *TokenValue = Json + Tokens[Index].Start;
+        if (strncmp(TokenValue, Key, strlen(Key)) == 0)
+        {
+            return (Index+1);
+        }
+    }
 
-    return (Result);
+    return (NULL);
 }
 
 MJSON_API void

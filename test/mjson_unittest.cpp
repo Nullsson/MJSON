@@ -107,3 +107,21 @@ TEST(MJSONTest, JSONObject_Advanced)
     UNITTEST_ASSERT_TRUE(t[24].Type == MJSON_STRING); // onclick
     UNITTEST_ASSERT_TRUE(t[25].Type == MJSON_STRING); // CloseDoc()
 }
+
+TEST(MJSONTest, MJSON_ExtractValue_Simple)
+{
+    char *JSONString = "{\"key\":0}";
+
+    mjson_parser p;
+    mjson_token t[3];
+
+    mjson_init(&p);
+    int MJSONResult = mjson_parse(&p, JSONString, strlen(JSONString), t, 3);
+
+    UNITTEST_ASSERT_TRUE(MJSONResult == 3);
+
+    mjson_token Value = t[mjson_get_value("key", JSONString, t, 3)];
+
+    UNITTEST_ASSERT_TRUE(Value.Type == MJSON_PRIMITIVE);
+    UNITTEST_ASSERT_TRUE(strncmp(JSONString + Value.Start, "0", 1) == 0);
+}
